@@ -11,7 +11,6 @@ const app = express();
 
 /*
  * Enables controlled cross-origin requests from the frontend
- * during local development.
  */
 app.use(cors({
   origin: "*",
@@ -30,22 +29,27 @@ app.use(express.json());
 app.use(helmet());
 
 /*
- * Public health-check route for quick backend verification.
+ * Public health-check route
  */
 app.get("/", (req, res) => {
   res.send("CLP Talent Portal API Running");
 });
 
-// Authentication routes
+// Routes
 app.use("/api/auth", authRoutes);
-
-// CV routes
 app.use("/api/cv", cvRoutes);
-
-// Graduate routes
 app.use("/api/graduates", graduateRoutes);
-
-// Admin routes
 app.use("/api/admin", adminRoutes);
+
+/*
+ * Global error handler (MUST be before export)
+ */
+app.use((err, req, res, next) => {
+  console.error("Server error:", err);
+
+  res.status(err.status || 500).json({
+    message: err.message || "Internal server error"
+  });
+});
 
 module.exports = app;

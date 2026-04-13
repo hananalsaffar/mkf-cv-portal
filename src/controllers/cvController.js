@@ -52,8 +52,8 @@ exports.uploadCV = async (req, res) => {
       return res.status(400).json({ message: "CV file is required" });
     }
 
-    const { originalname, filename, path: filePath } = req.file;
-    const resolvedPath = path.resolve(filePath);
+    const { originalname, filename, path: uploadedPath } = req.file;
+    const resolvedPath = path.resolve(uploadedPath);
 
     // Make sure the uploaded file exists before encrypting it
     if (!fs.existsSync(resolvedPath)) {
@@ -80,7 +80,7 @@ exports.uploadCV = async (req, res) => {
         graduate_id,
         originalname,
         filename,
-        filePath,
+        filename,
         encryptionResult.iv,
         encryptionResult.tag,
         1
@@ -94,7 +94,7 @@ exports.uploadCV = async (req, res) => {
       file: {
         original_filename: originalname,
         stored_filename: filename,
-        file_path: filePath,
+        file_path: filename,
         is_encrypted: true
       }
     });
@@ -137,7 +137,8 @@ exports.downloadCV = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const resolvedPath = path.resolve(cv.file_path);
+    // Build the file path using the current server uploads folder
+    const resolvedPath = path.join(__dirname, "..", "uploads", cv.stored_filename);
 
     // Check that the file still exists on the server
     if (!fs.existsSync(resolvedPath)) {
@@ -146,7 +147,7 @@ exports.downloadCV = async (req, res) => {
 
     let fileBuffer;
 
-    // Decrypt new encrypted files and still allow older plain files
+    // Decrypt encrypted files before sending them
     if (cv.is_encrypted) {
       if (!cv.encryption_iv || !cv.encryption_tag) {
         return res.status(500).json({ message: "Encryption metadata is missing" });
