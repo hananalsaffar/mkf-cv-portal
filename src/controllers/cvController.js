@@ -2,10 +2,13 @@ const db = require("../config/db");
 const path = require("path");
 const fs = require("fs");
 const logAction = require("../utils/auditLogger");
+const supabase = require("../config/supabase");
+
 const {
   extractPdfText,
   extractGraduateDetailsFromText
 } = require("../services/cvExtractionService");
+
 const {
   encryptFileAtPath,
   decryptFileFromPath
@@ -64,6 +67,25 @@ exports.uploadCV = async (req, res) => {
 
     // Encrypt the file after multer saves it to disk
     const encryptionResult = encryptFileAtPath(resolvedPath);
+
+    // Read encrypted file into memory
+    const encryptedBuffer = fs.readFileSync(resolvedPath);
+
+    // Upload encrypted file to Supabase storage (persistent)
+    const { error: uploadError } = await supabase.storage
+      .from("cvs")
+      .upload(filename, encryptedBuffer, {
+        contentType: "application/pdf",
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error("Supabase upload error:", uploadError);
+      return res.status(500).json({ message: "Failed to upload CV to storage" });
+    }
+
+    // Delete local file after upload (no longer needed on server)
+    fs.unlinkSync(resolvedPath);
 
     const [result] = await db.promise().query(
       `INSERT INTO cv_files (
@@ -137,30 +159,47 @@ exports.downloadCV = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // Build the file path using the current server uploads folder
-    const resolvedPath = path.join(__dirname, "..", "uploads", cv.stored_filename);
+    // Download encrypted file from Supabase instead of local server
+    const { data, error: downloadError } = await supabase.storage
+      .from("cvs")
+      .download(cv.stored_filename);
 
-    // Check that the file still exists on the server
-    if (!fs.existsSync(resolvedPath)) {
-      return res.status(404).json({ message: "CV file not found on server" });
+    if (downloadError || !data) {
+      return res.status(404).json({ message: "CV file not found in storage" });
     }
+
+    const encryptedBuffer = Buffer.from(await data.arrayBuffer());
+
+    // Temporary file path for decryption
+    const tempPath = path.join(
+      __dirname,
+      "..",
+      "uploads",
+      `temp-${cv.stored_filename}`
+    );
+
+    fs.writeFileSync(tempPath, encryptedBuffer);
 
     let fileBuffer;
 
     // Decrypt encrypted files before sending them
     if (cv.is_encrypted) {
       if (!cv.encryption_iv || !cv.encryption_tag) {
+        fs.unlinkSync(tempPath);
         return res.status(500).json({ message: "Encryption metadata is missing" });
       }
 
       fileBuffer = decryptFileFromPath(
-        resolvedPath,
+        tempPath,
         cv.encryption_iv,
         cv.encryption_tag
       );
     } else {
-      fileBuffer = fs.readFileSync(resolvedPath);
+      fileBuffer = encryptedBuffer;
     }
+
+    // Delete temporary file after use
+    fs.unlinkSync(tempPath);
 
     await logAction(req.user.id, "CV_DOWNLOAD", "cv_file", cv.id);
 

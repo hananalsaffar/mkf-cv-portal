@@ -16,6 +16,9 @@ exports.createGraduate = async (req, res) => {
       [full_name, major, graduation_year, skills]
     );
 
+    // Record graduate creation for accountability
+    await logAction(req.user.id, "GRADUATE_CREATED", "graduate", result.insertId);
+
     res.status(201).json({
       message: "Graduate created successfully",
       graduate_id: result.insertId
@@ -42,6 +45,9 @@ exports.updateGraduate = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Graduate not found" });
     }
+
+    // Record graduate update for accountability
+    await logAction(req.user.id, "GRADUATE_UPDATED", "graduate", id);     
 
     res.json({
       message: "Graduate updated successfully"

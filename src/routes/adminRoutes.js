@@ -3,8 +3,6 @@ const router = express.Router();
 
 const {
   getAuditLogs,
-  getMostAccessedCVs,
-  getAccessHistoryByOrganization
 } = require("../controllers/adminController");
 
 const {
@@ -22,10 +20,6 @@ router.use(authorizeRoles("admin"));
 
 // Audit logs
 router.get("/audit-logs", getAuditLogs);
-
-// Reports
-router.get("/reports/most-accessed-cvs", getMostAccessedCVs);
-router.get("/reports/access-history", getAccessHistoryByOrganization);
 
 // Partner account management
 router.post("/partners", createPartner);
